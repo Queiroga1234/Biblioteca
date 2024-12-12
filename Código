@@ -1,0 +1,190 @@
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+#define MAX_LIVROS 100
+#define MAX_USUARIOS 50
+#define MAX_EMPRESTIMOS 50
+
+typedef struct {
+    char titulo[100];
+    char autor[100];
+    char ISBN[20];
+    int ano;
+    int disponivel;
+} Livro;
+
+typedef struct {
+    char nome[100];
+    int id;
+    char contato[50];
+    int emprestimosAtuais;
+} Usuario;
+
+typedef struct {
+    int usuarioId;
+    char livroISBN[20];
+    char dataEmprestimo[11];
+    char dataDevolucao[11];
+} Emprestimo;
+
+Livro livros[MAX_LIVROS];
+Usuario usuarios[MAX_USUARIOS];
+Emprestimo emprestimos[MAX_EMPRESTIMOS];
+
+int totalLivros = 0;
+int totalUsuarios = 0;
+int totalEmprestimos = 0;
+
+void obterDataAtual(char *data) {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    sprintf(data, "%02d/%02d/%04d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
+}
+
+void calcularDataFutura(char *dataInicial, int dias, char *dataFutura) {
+    struct tm tm;
+    sscanf(dataInicial, "%d/%d/%d", &tm.tm_mday, &tm.tm_mon, &tm.tm_year);
+    tm.tm_mon -= 1;
+    tm.tm_year -= 1900;
+    time_t t = mktime(&tm) + (dias * 24 * 60 * 60);
+    struct tm *novaData = localtime(&t);
+    sprintf(dataFutura, "%02d/%02d/%04d", novaData->tm_mday, novaData->tm_mon + 1, novaData->tm_year + 1900);
+}
+
+int compararDatas(char *data1, char *data2) {
+    struct tm tm1, tm2;
+    sscanf(data1, "%d/%d/%d", &tm1.tm_mday, &tm1.tm_mon, &tm1.tm_year);
+    sscanf(data2, "%d/%d/%d", &tm2.tm_mday, &tm2.tm_mon, &tm2.tm_year);
+    tm1.tm_mon -= 1;
+    tm1.tm_year -= 1900;
+    tm2.tm_mon -= 1;
+    tm2.tm_year -= 1900;
+
+    time_t t1 = mktime(&tm1);
+    time_t t2 = mktime(&tm2);
+
+    if (t1 < t2) return -1;
+    if (t1 > t2) return 1;
+    return 0;
+}
+
+void realizarEmprestimo() {
+	int i;
+    int usuarioId;
+    char livroISBN[20];
+    char dataAtual[11], dataDevolucao[11];
+
+    printf("Digite o ID do usuario: ");
+    scanf("%d", &usuarioId);
+
+    Usuario *usuario = NULL;
+    for (i = 0; i < totalUsuarios; i++) {
+        if (usuarios[i].id == usuarioId) {
+            usuario = &usuarios[i];
+            break;
+        }
+    }
+    if (usuario == NULL) {
+        printf("Usuario nao encontrado.\n");
+        return;
+    }
+
+    printf("Digite o ISBN do livro: ");
+    scanf(" %[^\n]", livroISBN);
+
+    Livro *livro = NULL;
+    for (i = 0; i < totalLivros; i++) {
+        if (strcmp(livros[i].ISBN, livroISBN) == 0) {
+            livro = &livros[i];
+            break;
+        }
+    }
+    if (livro == NULL) {
+        printf("Livro nao encontrado.\n");
+        return;
+    }
+    if (!livro->disponivel) {
+        printf("Livro nao esta disponivel.\n");
+        return;
+    }
+
+    obterDataAtual(dataAtual);
+    calcularDataFutura(dataAtual, 14, dataDevolucao);
+
+    Emprestimo novoEmprestimo = {usuarioId, "", "", ""};
+    strcpy(novoEmprestimo.livroISBN, livroISBN);
+    strcpy(novoEmprestimo.dataEmprestimo, dataAtual);
+    strcpy(novoEmprestimo.dataDevolucao, dataDevolucao);
+
+    emprestimos[totalEmprestimos++] = novoEmprestimo;
+    livro->disponivel = 0;
+    usuario->emprestimosAtuais++;
+
+    printf("Emprestimo realizado com sucesso!\n");
+    printf("Data de devolucao: %s\n", dataDevolucao);
+}
+
+void registrarDevolucao() {
+	int i;
+	int j;
+    char livroISBN[20];
+    printf("Digite o ISBN do livro a ser devolvido: ");
+    scanf(" %[^\n]", livroISBN);
+
+    for (i = 0; i < totalEmprestimos; i++) {
+        if (strcmp(emprestimos[i].livroISBN, livroISBN) == 0) {
+            char dataAtual[11];
+            obterDataAtual(dataAtual);
+
+            if (compararDatas(dataAtual, emprestimos[i].dataDevolucao) > 0) {
+                printf("Atencao: Devolução atrasada! Data limite era %s.\n", emprestimos[i].dataDevolucao);
+            } else {
+                printf("Devolucao dentro do prazo.\n");
+            }
+
+            for (j = 0; j < totalLivros; j++) {
+                if (strcmp(livros[j].ISBN, livroISBN) == 0) {
+                    livros[j].disponivel = 1;
+                    break;
+                }
+            }
+            for (j = 0; j < totalUsuarios; j++) {
+                if (usuarios[j].id == emprestimos[i].usuarioId) {
+                    usuarios[j].emprestimosAtuais--;
+                    break;
+                }
+            }
+
+            for (j = i; j < totalEmprestimos - 1; j++) {
+                emprestimos[j] = emprestimos[j + 1];
+            }
+            totalEmprestimos--;
+
+            printf("Devolucao registrada com sucesso!\n");
+            return;
+        }
+    }
+
+    printf("Emprestimo não encontrado.\n");
+}
+
+int main() {
+    int opcao;
+    do {
+        printf("\nSistema de Gerenciamento de Biblioteca\n");
+        printf("1. Realizar Emprestimo\n");
+        printf("2. Registrar Devolucao\n");
+        printf("0. Sair\n");
+        printf("Escolha uma opcao: ");
+        scanf("%d", &opcao);
+
+        switch (opcao) {
+            case 1: realizarEmprestimo(); break;
+            case 2: registrarDevolucao(); break;
+            case 0: printf("Saindo...\n"); break;
+            default: printf("Opcao invalida.\n");
+        }
+    } while (opcao != 0);
+    return 0;
+}
